@@ -8,5 +8,5 @@ QuarantineTimeout: 5
 
 [Paths]
 # Which directories are allowed. Separate with commas. Use absolute paths.
-Dirs: /home/victor/Downloads,/home/victor/scripts
+Dirs: /home/user/Downloads,/home/user/scripts
 Exclude: placeholder
