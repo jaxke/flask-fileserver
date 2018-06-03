@@ -1,0 +1,12 @@
+[Security]
+# hashed password!
+Password: 5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8
+# How many times user can enter a wrong password before locking down
+PasswordAttempts: 3
+# In minutes
+QuarantineTimeout: 5
+
+[Paths]
+# Which directories are allowed. Separate with commas. Use absolute paths.
+Dirs: /home/victor/Downloads,/home/victor/scripts
+Exclude: placeholder

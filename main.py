@@ -3,14 +3,37 @@ from pdb import set_trace as st
 import hashlib
 from flask import Flask, request, abort, jsonify, send_from_directory, send_file, session
 from datetime import datetime, timezone
+import configparser
 
-PARENT_DIR = ["/home/victor/scripts", "/home/victor/.config"]
+
+REAL_PATH = os.path.dirname(os.path.abspath(__file__))
+CONF = REAL_PATH + "/config"
+print(CONF)
 
 app = Flask(__name__)
 app.secret_key = "vbju712gg2"
 
-passwd_attempts = 3
 
+class Config:
+    password = ""
+    password_attempts = 3
+    # This is a runtime value to keep track of failed logins
+    curr_attempts = password_attempts
+    quarantine_timeout = 5
+    allowed_directories = []
+    def __init__(self):
+        Config = configparser.ConfigParser()
+        Config.read(CONF)
+
+        self.password = Config.get('Security', 'Password')
+        self.password_attempts = Config.get('Security', 'PasswordAttempts')
+        self.curr_attempts = self.password_attempts
+        self.quarantine_timeout = Config.get('Security', 'QuarantineTimeout')
+        self.allowed_directories = Config.get('Paths', 'Dirs').split(",")
+
+
+# Initialize configuration object
+config = Config()
 
 # Expire session variables after 15 minutes(user will have to logon again after this timeout)
 @app.before_request
@@ -23,17 +46,14 @@ def expire_session():
 def validate_login(passwd_input):
     passwd_input_hash = hashlib.sha256(str.encode(passwd_input))
     passwd_input_hash = passwd_input_hash.hexdigest()
-    # Hashed password is in a file "passwd"
-    with open("passwd", "r") as pwf:
-        passwd_valid = pwf.read().strip()
-        if passwd_valid == passwd_input_hash:
-            session['logged'] = True
-        else:
-            global passwd_attempts
-            if passwd_attempts == 0:
-                invoke_quarantine()
-            passwd_attempts -= 1
-            print(passwd_attempts)
+    print(passwd_input_hash)
+    passwd_valid = config.password
+    if passwd_valid == passwd_input_hash:
+        session['logged'] = True
+    else:
+        if config.passwd_attempts == 0:
+            invoke_quarantine()
+        config.passwd_attempts -= 1
     # Return the value of session var 'logged' -> return False if variable doesn't exist(valid password hasn't been entered or session has expired)
     return session.get('logged', False)
 
@@ -59,8 +79,9 @@ def fallback(dir):
     if not session.get('logged', False):
         return "Forbidden"
     forbidden = True
+    parent_dirs = config.allowed_directories
     # Check if user is trying to access files under pre-specified directories(PARENT_DIR)
-    for d in PARENT_DIR:
+    for d in config.allowed_directories:
         if ("/"+dir).startswith(d):
             forbidden = False
             break
@@ -84,8 +105,8 @@ def check_logged():
         return logon_page()
 
 def invoke_quarantine():
-    global passwd_attempts
-    passwd_attempts = 3
+    # Reset "current attempts" to default upon invoking quarantine
+    config.curr_attempts = config.passwd_attempts
     # Create file(or recreate silently)
     open(".quarantine", 'a').close()
     with open(".quarantine", "w") as qw:
@@ -124,11 +145,16 @@ def logon_page():
             <input type="submit" text="Log on">
             </form>'''
 
+# TODO currently only av in debugger
+def logout():
+    session.clear()
+    logon_page()
+
 
 # Top route needs its own method because subdirs are read from predefinied values and are not necessarily in the same path
 def index():
     parent_dirs = ""
-    for dir in PARENT_DIR:
+    for dir in config.allowed_directories:
         parent_dirs += '<a href={0}><p style="color:red;">{0}</p></div>'.format(dir)
     return parent_dirs
 
