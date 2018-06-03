@@ -1,4 +1,4 @@
-# lask-fileserver
+# Flask-fileserver
 Serve files from your filesystem
 
 ## Features
