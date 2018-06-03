@@ -26,9 +26,9 @@ class Config:
         Config.read(CONF)
 
         self.password = Config.get('Security', 'Password')
-        self.password_attempts = Config.get('Security', 'PasswordAttempts')
+        self.password_attempts = int(Config.get('Security', 'PasswordAttempts'))
         self.curr_attempts = self.password_attempts
-        self.quarantine_timeout = Config.get('Security', 'QuarantineTimeout')
+        self.quarantine_timeout = int(Config.get('Security', 'QuarantineTimeout'))
         self.allowed_directories = Config.get('Paths', 'Dirs').split(",")
 
 
@@ -51,9 +51,12 @@ def validate_login(passwd_input):
     if passwd_valid == passwd_input_hash:
         session['logged'] = True
     else:
-        if config.passwd_attempts == 0:
+        config.curr_attempts -= 1
+        if config.curr_attempts == 0:
+            st()
             invoke_quarantine()
-        config.passwd_attempts -= 1
+            return "Quarantine"
+        print("Attempts remaining ", config.curr_attempts)
     # Return the value of session var 'logged' -> return False if variable doesn't exist(valid password hasn't been entered or session has expired)
     return session.get('logged', False)
 
@@ -106,18 +109,18 @@ def check_logged():
 
 def invoke_quarantine():
     # Reset "current attempts" to default upon invoking quarantine
-    config.curr_attempts = config.passwd_attempts
+    config.curr_attempts = config.password_attempts
     # Create file(or recreate silently)
     open(".quarantine", 'a').close()
     with open(".quarantine", "w") as qw:
         qw.write(datetime.now().strftime("%Y/%m/%d %H:%M:%S"))
-    return user_in_quarantine()
 
 
 def user_in_quarantine():
     return "<p> You are in quarantine. You may try to login soon again. </p>"
 
-# Very lazy method for checking if 5 mins has passed, will not work when hour changes
+# Very lazy method for checking if x mins has passed, will not work when hour changes.
+# Return False if in quarantine, True if not
 def check_quarantine():
     try:
         with open(".quarantine", "r") as qr:
@@ -128,15 +131,14 @@ def check_quarantine():
                 if datetime.now().time().hour > qr_start_time.hour:
                     return True
                 else:
-                    if datetime.now().time().minute - qr_start_time.minute > 5:
+                    if datetime.now().time().minute - qr_start_time.minute > config.quarantine_timeout:
                         return True
                     else:
                         return False
             else:
                 return True
     except FileNotFoundError:
-        open(".quarantine", 'a').close()
-        return False
+        return True
 
 
 def logon_page():
@@ -163,8 +165,11 @@ def index():
 @app.route('/', methods=['POST'])
 def post_password():
     passwd_input = request.form['passwd']
-    if validate_login(passwd_input):
+    login_validation = validate_login(passwd_input)
+    if login_validation == True:
         return index()
+    elif login_validation == "Quarantine":
+        return user_in_quarantine()
     else:
         return logon_page()
 
