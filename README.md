@@ -31,6 +31,10 @@ QuarantineTimeout: 5
 Dirs: /home/user/Downloads,/home/user/Pictures
 # To be implemented
 Exclude: placeholder
+
+[Logging]
+Enabled: 1
+File: serv.log
 ```
 
 ## To-do
