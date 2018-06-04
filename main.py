@@ -82,8 +82,10 @@ def list_files(directory):
     return files
 
 
+# Handle any url below root... works exactly like a file system browser
 @app.route('/<path:dir>')
 def fallback(dir):
+    dir = dir.replace("!", " ")
     # This eiher lets user pass or will return quarantine or login page depending on the function return
     login_check = check_logged()
     if login_check is not True:
@@ -93,6 +95,7 @@ def fallback(dir):
     parent_dirs = config.allowed_directories
     # Check if user is trying to access files under pre-specified directories(PARENT_DIR)
     for d in config.allowed_directories:
+        # Spaces are exclamation marks in url, see render_listing() hrefs
         if ("/"+dir).startswith(d):
             forbidden = False
             break
@@ -107,7 +110,7 @@ def fallback(dir):
     else:
         #return send_file(dir, attachment_filename=dir.split("/")[0])
         log_access(visitor=request.remote_addr, message="Download", path=dir)
-        return send_file(dir, as_attachment=True)
+        return send_file(dir, attachment_filename=dir)
 
 
 @app.route('/')
@@ -204,7 +207,11 @@ def render_listing(listing):
     colours = {"file": "blue", "dir": "green"}
     disp = ""
     for item in listing:
-        disp += '<a href={1}><p style="color:{0};">{1}</p></div>'.format(colours[item['type']], req + item['name'])
+        # Avoid spaces in url
+        item_nospace = req + item['name'].replace(" ", "!")
+        # ... and display a's values with spaces instead of exclamation marks
+        item_proper_name = (req + item['name']).replace("!", " ")
+        disp += '<a href={0}><p style="color:{1};">{2}</p></div>'.format(item_nospace, colours[item['type']], item_proper_name)
     return disp
 
 
