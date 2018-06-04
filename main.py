@@ -21,6 +21,7 @@ class Config:
     curr_attempts = password_attempts
     quarantine_timeout = 5
     allowed_directories = []
+    log_file = ""
     def __init__(self):
         Config = configparser.ConfigParser()
         Config.read(CONF)
@@ -30,6 +31,10 @@ class Config:
         self.curr_attempts = self.password_attempts
         self.quarantine_timeout = int(Config.get('Security', 'QuarantineTimeout'))
         self.allowed_directories = Config.get('Paths', 'Dirs').split(",")
+        if Config.get('Logging', 'Enabled') == "1":
+            self.log_file = Config.get('Logging', 'File')
+        else:
+            self.log_file = None
 
 
 # Initialize configuration object
@@ -38,6 +43,7 @@ config = Config()
 # Expire session variables after 15 minutes(user will have to logon again after this timeout)
 @app.before_request
 def expire_session():
+    #session.clear() # TODO debugging!!
     from datetime import timedelta
     session.permanent = True
     app.permanent_session_lifetime = timedelta(minutes=15)
@@ -53,7 +59,6 @@ def validate_login(passwd_input):
     else:
         config.curr_attempts -= 1
         if config.curr_attempts == 0:
-            st()
             invoke_quarantine()
             return "Quarantine"
         print("Attempts remaining ", config.curr_attempts)
@@ -79,7 +84,10 @@ def list_files(directory):
 
 @app.route('/<path:dir>')
 def fallback(dir):
-    if not session.get('logged', False):
+    # This eiher lets user pass or will return quarantine or login page depending on the function return
+    login_check = check_logged()
+    if login_check is not True:
+        log_access(visitor=request.remote_addr, message="Denied", path=dir)
         return "Forbidden"
     forbidden = True
     parent_dirs = config.allowed_directories
@@ -89,25 +97,46 @@ def fallback(dir):
             forbidden = False
             break
     if forbidden:
+        log_access(visitor=request.remote_addr, message="Denied", path=dir)
         return "Forbidden"
     dir = "/" + dir
     if not os.path.isfile(dir):
+        log_access(visitor=request.remote_addr, message="Access", path=dir)
         return render_listing(list_files(dir))
     # User has clicked on a file(as in not a directory), this will enable the browser to popup a download dialog for that file
     else:
-        return send_file(dir, attachment_filename=dir.split("/")[0])
+        #return send_file(dir, attachment_filename=dir.split("/")[0])
+        log_access(visitor=request.remote_addr, message="Download", path=dir)
+        return send_file(dir, as_attachment=True)
 
 
 @app.route('/')
+# Top route needs its own method because subdirs are read from predefinied values and are not necessarily in the same path
+def index():
+    log_access(visitor=request.remote_addr, message="Access", path="root")
+    login_check = check_logged()
+    if login_check is False:
+        log_access(visitor=request.remote_addr, message="invalid login", path=None)
+        return logon_page()
+    elif login_check == True:
+        parent_dirs = ""
+        for dir in config.allowed_directories:
+            parent_dirs += '<a href={0}><p style="color:red;">{0}</p></div>'.format(dir)
+        return parent_dirs
+    elif login_check == "Quarantine":
+        return user_in_quarantine
+
+
 def check_logged():
     if not check_quarantine():
         return user_in_quarantine()
     if session.get('logged', False):
-        return index()
+        return True
     else:
-        return logon_page()
+        return False
 
 def invoke_quarantine():
+    log_access(visitor=request.remote_addr, message="quarantine", path=None)
     # Reset "current attempts" to default upon invoking quarantine
     config.curr_attempts = config.password_attempts
     # Create file(or recreate silently)
@@ -144,21 +173,13 @@ def check_quarantine():
 def logon_page():
     return '''<form method="POST">
             <input name="passwd">
-            <input type="submit" text="Log on">
+            <input type="submit" value="Log on">
             </form>'''
 
-# TODO currently only av in debugger
+
+# TODO currently only avail in debugger
 def logout():
     session.clear()
-    logon_page()
-
-
-# Top route needs its own method because subdirs are read from predefinied values and are not necessarily in the same path
-def index():
-    parent_dirs = ""
-    for dir in config.allowed_directories:
-        parent_dirs += '<a href={0}><p style="color:red;">{0}</p></div>'.format(dir)
-    return parent_dirs
 
 
 # Listen to password input on login screen
@@ -185,6 +206,24 @@ def render_listing(listing):
     for item in listing:
         disp += '<a href={1}><p style="color:{0};">{1}</p></div>'.format(colours[item['type']], req + item['name'])
     return disp
+
+
+def log_access(visitor, message, path):
+    if config.log_file == None:
+        return
+    with open(config.log_file, "a+") as log:
+        log.write("At {0} by {1} : ".format(datetime.now().ctime(), visitor, path))
+        if message == "Denied":
+            log.write("Access denied")
+        elif message == "invalid login":
+            log.write("Invalid login")
+        elif message == "quarantine":
+            log.write("Quarantine invoked")
+        elif message == "Download":
+            log.write("Downloaded " + path)
+        elif message == "Access":
+            log.write("Navigated to " + path)
+        log.write("\n")
 
 
 if __name__ == '__main__':

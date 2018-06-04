@@ -13,7 +13,7 @@ cd flask-fileserver
 export FLASK_APP=main.py  
 flask run  
 ```
-Open Firefox at http://0.0.0.0:5000/. Without further configuration it's not
+Open Firefox at http://0.0.0.0:5000/ or http://[IP of server]:5000/. Without further configuration it's not
 going to reach outside of your local network(if port forwarding is not configured properly).
 
 ### Configuration file

@@ -8,5 +8,9 @@ QuarantineTimeout: 5
 
 [Paths]
 # Which directories are allowed. Separate with commas. Use absolute paths.
-Dirs: /home/victor/Downloads,/home/victor/scripts
+Dirs: /home/victor/Downloads,/home/victor/scripts,/home/victor/Pictures
 Exclude: placeholder
+
+[Logging]
+Enabled: 1
+File: serv.log
