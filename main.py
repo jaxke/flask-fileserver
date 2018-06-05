@@ -1,9 +1,10 @@
 import os
 from pdb import set_trace as st
 import hashlib
-from flask import Flask, request, abort, jsonify, send_from_directory, send_file, session
+from flask import Flask, request, abort, jsonify, send_from_directory, send_file, session, render_template
 from datetime import datetime, timezone
 import configparser
+import operator
 
 
 REAL_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -12,6 +13,25 @@ print(CONF)
 
 app = Flask(__name__)
 app.secret_key = "vbju712gg2"
+
+# TODO
+# Handle downloads in a better way
+''' SO:
+@app.route('/uploads/<path:filename>', methods=['GET', 'POST'])
+def download(filename):
+    uploads = os.path.join(current_app.root_path, app.config['UPLOAD_FOLDER'])
+    return send_from_directory(directory=uploads, filename=filename)
+'''
+# or
+''' Github:
+@app.route('/download/', methods=['GET'])
+def download():
+    url = request.args['url']
+    filename = request.args.get('filename', 'image.png')
+    r = requests.get(url)
+    strIO = StringIO.StringIO(r.content)
+return send_file(strIO, as_attachment=True, attachment_filename=filename)
+'''
 
 
 class Config:
@@ -43,7 +63,6 @@ config = Config()
 # Expire session variables after 15 minutes(user will have to logon again after this timeout)
 @app.before_request
 def expire_session():
-    #session.clear() # TODO debugging!!
     from datetime import timedelta
     session.permanent = True
     app.permanent_session_lifetime = timedelta(minutes=15)
@@ -79,7 +98,8 @@ def list_files(directory):
                 files.append({"name": filename, "type": "dir"})
     except FileNotFoundError:
         pass # TODO
-    return files
+    # Sort, non case sensitive
+    return sorted(files, key=lambda files: files['name'].lower())
 
 
 # Handle any url below root... works exactly like a file system browser
@@ -105,12 +125,13 @@ def fallback(dir):
     dir = "/" + dir
     if not os.path.isfile(dir):
         log_access(visitor=request.remote_addr, message="Access", path=dir)
-        return render_listing(list_files(dir))
+        return render_listing(list_files(dir), dir)
     # User has clicked on a file(as in not a directory), this will enable the browser to popup a download dialog for that file
     else:
         #return send_file(dir, attachment_filename=dir.split("/")[0])
         log_access(visitor=request.remote_addr, message="Download", path=dir)
-        return send_file(dir, attachment_filename=dir)
+        #return send_file(dir, attachment_filename=dir)
+        return send_file(dir, as_attachment=True, attachment_filename=dir.split("/")[-1])
 
 
 @app.route('/')
@@ -199,20 +220,29 @@ def post_password():
 
 
 # Return HTML links to subdirectories and files
-def render_listing(listing):
+def render_listing(listing, dir):
     req = request.path
     if req[-1] != "/":
         req += "/"
     # Use different colours for files/directories
     colours = {"file": "blue", "dir": "green"}
     disp = ""
+    listing2 = []
     for item in listing:
         # Avoid spaces in url
         item_nospace = req + item['name'].replace(" ", "!")
         # ... and display a's values with spaces instead of exclamation marks
-        item_proper_name = (req + item['name']).replace("!", " ")
-        disp += '<a href={0}><p style="color:{1};">{2}</p></div>'.format(item_nospace, colours[item['type']], item_proper_name)
-    return disp
+        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]
+        #disp += '<a href={0}><p style="color:{1}; class=entry-{2}">{3}</p>'.format(item_nospace, colours[item['type']], item['type'], item_proper_name)
+        if item['type'] == "dir":
+            item_proper_name += "/"
+        disp += '<a href={0}><p class=entry-{1}">{2}</p>'.format(item_nospace, item['type'], item_proper_name)
+        #listing2 += '<a href={0}><p class=entry-{1}">{2}</p>'.format(item_nospace, item['type'], item_proper_name)
+        listing2.append({"href": item_nospace, "type": item['type'], "value": item_proper_name})
+    if disp == "":
+        disp = "<a><p> Empty directory </p></a>"
+    return render_template('listing.html', **locals())
+    #return disp
 
 
 def log_access(visitor, message, path):
