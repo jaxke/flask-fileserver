@@ -14,25 +14,6 @@ print(CONF)
 app = Flask(__name__)
 app.secret_key = "vbju712gg2"
 
-# TODO
-# Handle downloads in a better way
-''' SO:
-@app.route('/uploads/<path:filename>', methods=['GET', 'POST'])
-def download(filename):
-    uploads = os.path.join(current_app.root_path, app.config['UPLOAD_FOLDER'])
-    return send_from_directory(directory=uploads, filename=filename)
-'''
-# or
-''' Github:
-@app.route('/download/', methods=['GET'])
-def download():
-    url = request.args['url']
-    filename = request.args.get('filename', 'image.png')
-    r = requests.get(url)
-    strIO = StringIO.StringIO(r.content)
-return send_file(strIO, as_attachment=True, attachment_filename=filename)
-'''
-
 
 class Config:
     password = ""
@@ -221,6 +202,7 @@ def post_password():
 
 # Return HTML links to subdirectories and files
 def render_listing(listing, dir):
+    # TODO req == dir
     req = request.path
     if req[-1] != "/":
         req += "/"
@@ -228,17 +210,19 @@ def render_listing(listing, dir):
     colours = {"file": "blue", "dir": "green"}
     # List of dicts(files/dirs)
     entries = []
+    # No need for step back in the top page
+    if dir not in config.allowed_directories:
+        parent_dir = "/".join(dir.split("/")[0:-1])
+        entries.append({"href": parent_dir, "type": "step_back", "value": ".."})
     for item in listing:
         # Avoid spaces in url, Ie. "/home/user/this\ is\ file" => "/home/user/this!is!file" for url
         item_nospace = req + item['name'].replace(" ", "!")
-        # ... and display a's values with spaces instead of exclamation marks
-        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]  # This is file/dir name, not path
+        # ... and display a's values with spaces instead of exclamation marks, and without full path
+        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]
         if item['type'] == "dir":
             item_proper_name += "/"
         # Type == class in Jinja(listing.html)
         entries.append({"href": item_nospace, "type": item['type'], "value": item_proper_name})
-    if len(entries) == 0:
-        entries.append({"href": "", "type": "empty", "value": "Directory is empty"})
     return render_template('listing.html', **locals())
     #return disp
 
