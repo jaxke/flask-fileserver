@@ -8,9 +8,12 @@
 <h1 class="title"> {{dir}} </h1>
 <br>
 <div>
-{% for item in listing2 %}
+{% for item in entries if not entries[0]['type'] == "empty" %}
   <a href="{{item['href']}}"><p class="{{'entry-' + item['type']}}"> {{item['value']}} </p></a>
 {% endfor %}
+{% if entries[0]['type'] == "empty" %}
+  <p class="empty-dir"> Directory is empty </p>
+{% endif %}
 </div>
 </body>
 </html>

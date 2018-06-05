@@ -226,21 +226,19 @@ def render_listing(listing, dir):
         req += "/"
     # Use different colours for files/directories
     colours = {"file": "blue", "dir": "green"}
-    disp = ""
-    listing2 = []
+    # List of dicts(files/dirs)
+    entries = []
     for item in listing:
-        # Avoid spaces in url
+        # Avoid spaces in url, Ie. "/home/user/this\ is\ file" => "/home/user/this!is!file" for url
         item_nospace = req + item['name'].replace(" ", "!")
         # ... and display a's values with spaces instead of exclamation marks
-        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]
-        #disp += '<a href={0}><p style="color:{1}; class=entry-{2}">{3}</p>'.format(item_nospace, colours[item['type']], item['type'], item_proper_name)
+        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]  # This is file/dir name, not path
         if item['type'] == "dir":
             item_proper_name += "/"
-        disp += '<a href={0}><p class=entry-{1}">{2}</p>'.format(item_nospace, item['type'], item_proper_name)
-        #listing2 += '<a href={0}><p class=entry-{1}">{2}</p>'.format(item_nospace, item['type'], item_proper_name)
-        listing2.append({"href": item_nospace, "type": item['type'], "value": item_proper_name})
-    if disp == "":
-        disp = "<a><p> Empty directory </p></a>"
+        # Type == class in Jinja(listing.html)
+        entries.append({"href": item_nospace, "type": item['type'], "value": item_proper_name})
+    if len(entries) == 0:
+        entries.append({"href": "", "type": "empty", "value": "Directory is empty"})
     return render_template('listing.html', **locals())
     #return disp
 
