@@ -9,7 +9,6 @@ import operator
 
 REAL_PATH = os.path.dirname(os.path.abspath(__file__))
 CONF = REAL_PATH + "/config"
-print(CONF)
 
 app = Flask(__name__)
 app.secret_key = "vbju712gg2"
@@ -52,7 +51,6 @@ def expire_session():
 def validate_login(passwd_input):
     passwd_input_hash = hashlib.sha256(str.encode(passwd_input))
     passwd_input_hash = passwd_input_hash.hexdigest()
-    print(passwd_input_hash)
     passwd_valid = config.password
     if passwd_valid == passwd_input_hash:
         session['logged'] = True
@@ -61,7 +59,6 @@ def validate_login(passwd_input):
         if config.curr_attempts == 0:
             invoke_quarantine()
             return "Quarantine"
-        print("Attempts remaining ", config.curr_attempts)
     # Return the value of session var 'logged' -> return False if variable doesn't exist(valid password hasn't been entered or session has expired)
     return session.get('logged', False)
 
@@ -84,19 +81,19 @@ def list_files(directory):
 
 
 # Handle any url below root... works exactly like a file system browser
+# This template method is called when a url is loaded that doesn't have a function in this code and the path is stored in 'dir'
 @app.route('/<path:dir>')
 def fallback(dir):
+    # Exclamation == space in url
     dir = dir.replace("!", " ")
-    # This eiher lets user pass or will return quarantine or login page depending on the function return
     login_check = check_logged()
+    # TODO redirect to /login
     if login_check is not True:
         log_access(visitor=request.remote_addr, message="Denied", path=dir)
         return "Forbidden"
     forbidden = True
-    parent_dirs = config.allowed_directories
-    # Check if user is trying to access files under pre-specified directories(PARENT_DIR)
+    # Check if user is trying to access files under pre-specified directories
     for d in config.allowed_directories:
-        # Spaces are exclamation marks in url, see render_listing() hrefs
         if ("/"+dir).startswith(d):
             forbidden = False
             break
@@ -109,9 +106,7 @@ def fallback(dir):
         return render_listing(list_files(dir), dir)
     # User has clicked on a file(as in not a directory), this will enable the browser to popup a download dialog for that file
     else:
-        #return send_file(dir, attachment_filename=dir.split("/")[0])
         log_access(visitor=request.remote_addr, message="Download", path=dir)
-        #return send_file(dir, attachment_filename=dir)
         return send_file(dir, as_attachment=True, attachment_filename=dir.split("/")[-1])
 
 
@@ -121,15 +116,26 @@ def index():
     log_access(visitor=request.remote_addr, message="Access", path="root")
     login_check = check_logged()
     if login_check is False:
-        log_access(visitor=request.remote_addr, message="invalid login", path=None)
+        log_access(visitor=request.remote_addr, message="invalid login", path="root")
         return logon_page()
     elif login_check == True:
-        parent_dirs = ""
+        parents = []
         for dir in config.allowed_directories:
-            parent_dirs += '<a href={0}><p style="color:red;">{0}</p></div>'.format(dir)
-        return parent_dirs
+            parents.append({"name": dir, "type": "dir"})
+        return render_listing(parents, "root")
     elif login_check == "Quarantine":
-        return user_in_quarantine
+        return user_in_quarantine()
+
+@app.route('/settings')
+def settings():
+    pass
+
+
+@app.route('/logout')
+def logout():
+    log_access(visitor=request.remote_addr, message="logout", path=None)
+    session.clear()
+    return index()
 
 
 def check_logged():
@@ -139,6 +145,7 @@ def check_logged():
         return True
     else:
         return False
+
 
 def invoke_quarantine():
     log_access(visitor=request.remote_addr, message="quarantine", path=None)
@@ -152,6 +159,7 @@ def invoke_quarantine():
 
 def user_in_quarantine():
     return "<p> You are in quarantine. You may try to login soon again. </p>"
+
 
 # Very lazy method for checking if x mins has passed, will not work when hour changes.
 # Return False if in quarantine, True if not
@@ -176,17 +184,10 @@ def check_quarantine():
 
 
 def logon_page():
-    return '''<form method="POST">
-            <input name="passwd">
-            <input type="submit" value="Log on">
-            </form>'''
+    return render_template('logon.html')
 
 
-# TODO currently only avail in debugger
-def logout():
-    session.clear()
-
-
+# TODO Method only works in /, logout redirects to /logout => does not work there
 # Listen to password input on login screen
 @app.route('/', methods=['POST'])
 def post_password():
@@ -202,35 +203,39 @@ def post_password():
 
 # Return HTML links to subdirectories and files
 def render_listing(listing, dir):
-    # TODO req == dir
-    req = request.path
-    if req[-1] != "/":
-        req += "/"
-    # Use different colours for files/directories
-    colours = {"file": "blue", "dir": "green"}
+    # Top title of page
+    title = dir
     # List of dicts(files/dirs)
     entries = []
     # No need for step back in the top page
-    if dir not in config.allowed_directories:
-        parent_dir = "/".join(dir.split("/")[0:-1])
-        entries.append({"href": parent_dir, "type": "step_back", "value": ".."})
+    if dir != "root":
+        # No need for (..) in top directories because upper dirs are forbidden
+        if dir not in config.allowed_directories:
+            parent_dir = "/".join(dir.split("/")[0:-1])
+            entries.append({"href": parent_dir, "type": "step_back", "value": ".."})
+        dir = dir + "/"
+    # Avoid double slash
+    else:
+        dir = ""
     for item in listing:
         # Avoid spaces in url, Ie. "/home/user/this\ is\ file" => "/home/user/this!is!file" for url
-        item_nospace = req + item['name'].replace(" ", "!")
+        item_nospace = dir + item['name'].replace(" ", "!")
         # ... and display a's values with spaces instead of exclamation marks, and without full path
-        item_proper_name = (req + item['name']).replace("!", " ").split("/")[-1]
+        item_proper_name = (item['name']).replace("!", " ")
         if item['type'] == "dir":
             item_proper_name += "/"
         # Type == class in Jinja(listing.html)
         entries.append({"href": item_nospace, "type": item['type'], "value": item_proper_name})
     return render_template('listing.html', **locals())
-    #return disp
 
 
+# This method writes to log file.
+# Visitor = IP Address of computer that invoked this function, path = where(url) this function was called
 def log_access(visitor, message, path):
     if config.log_file == None:
         return
     with open(config.log_file, "a+") as log:
+        # TODO proper date format DD/MM/YYYY
         log.write("At {0} by {1} : ".format(datetime.now().ctime(), visitor, path))
         if message == "Denied":
             log.write("Access denied")
@@ -242,6 +247,8 @@ def log_access(visitor, message, path):
             log.write("Downloaded " + path)
         elif message == "Access":
             log.write("Navigated to " + path)
+        elif message == "logout":
+            log.write("Logged out.")
         log.write("\n")
 
 

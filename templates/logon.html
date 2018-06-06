@@ -6,15 +6,15 @@
 <body>
 <title>{% block title %} Flask fileserver {% endblock %}</title>
 <div class="top container is-fluid">
-  <h1 class="title has-text-centered"> {{title}} </h1>
+  <h1 class="title has-text-centered"> Login </h1>
   <!-- <a class="settings-btn" href="/settings">Settings</a> -->
-  <a href="/logout"><p class="has-text-right"> Log out </p></a>
 </div>
 <br>
-<div class="entries-list">
-{% for item in entries %}
-  <a class="entry-link" href="{{item['href']}}"><div class="entry"><p class="entry {{'entry-' + item['type']}}"> {{item['value']}} </p></a>
-{% endfor %}
+<div class="login-form">
+  <form method="POST">
+    <input name="passwd" class="is-rounded" type="password">
+    <input type="submit" value="Log on" class="button">
+  </form>
 </div>
 </body>
 </html>
